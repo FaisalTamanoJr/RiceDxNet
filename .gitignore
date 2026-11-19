@@ -1,0 +1,12 @@
+# Original version, kept locally for reference only
+old/
+GUIDE.md
+
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+data/
+runs/
+runs_simple/
+*.pt
+*.onnx
