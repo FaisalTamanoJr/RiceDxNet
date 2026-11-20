@@ -1,3 +1,4 @@
+from collections import Counter
 from pathlib import Path
 
 import torch
@@ -5,7 +6,7 @@ import torch.nn
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Subset
 from torchvision.datasets import ImageFolder
-from collections import Counter
+from torchvision.transforms import transforms, v2
 
 # SETUP
 SEED = 42
@@ -73,3 +74,38 @@ for key in sorted(train_counts.keys()):
         f"{key} | train: {train_counts[key]}, validation: {val_counts[key]}, test: {test_counts[key]}"
     )
 """
+
+# IMAGE TRANSFORMS
+normalize = (v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),)
+
+train_transform = transforms.Compose(
+    [
+        transforms.RandomResizedCrop(224, scale=(0.7, 1.0)),
+        transforms.RandomHorizontalFlip(),
+        transforms.ColorJitter(0.3, 0.3, 0.3),
+        transforms.ToImage(),  # Convert Image to Tensor
+        v2.ToDtype(torch.float32, scale=True),
+        v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]
+)
+
+val_test_transform = transforms.Compose(
+    [
+        transforms.Resize(224, 224),
+        transforms.ToImage(),  # Convert Image to Tensor
+        v2.ToDtype(torch.float32, scale=True),
+        v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]
+)
+
+# TODO: RiceNet Class
+
+# TODO: RiceNet Loader
+
+# TODO: RiceNet freeze
+
+# TODO: RiceNet finetune
+
+# TODO: Ricenet small cnn
+
+# NOTE: Separate into modules when done and rerun experiments
