@@ -237,4 +237,3 @@ if __name__ == "__main__":
 
     print(f"FINAL TEST ACCURACY: {accuracy_score(test_labels, test_preds) * 100:.2f}%")
     print(f"FINAL TEST MACRO-F1: {f1_score(test_labels, test_preds, average='macro'):.4f}")
-    print("Done! Hand 'checkpoints/best_resnet18.pth' to Faisal for ONNX export.")
