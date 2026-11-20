@@ -5,6 +5,15 @@ Fine-tuning an ImageNet-pretrained **ResNet18** to classify 14 rice classes
 compared against a **small CNN trained from scratch** as the baseline.
 
 ## Setup
+Windows
+```bash
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+py -3.12 -m venv .venv
+.venv\Scripts\activate.bat
+pip install -r requirements.txt
+```
+
+Linux
 
 ```bash
 uv venv --python 3.12 .venv
