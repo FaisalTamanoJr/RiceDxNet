@@ -4,7 +4,7 @@ from pathlib import Path
 import torch
 import torch.nn
 from sklearn.model_selection import train_test_split
-from torch.utils.data import Subset
+from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision.datasets import ImageFolder
 from torchvision.transforms import transforms, v2
 
@@ -76,14 +76,17 @@ for key in sorted(train_counts.keys()):
 """
 
 # IMAGE TRANSFORMS
-normalize = (v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),)
+normalize = transforms.Compose(
+    (v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),)
+)
 
 train_transform = transforms.Compose(
     [
         transforms.RandomResizedCrop(224, scale=(0.7, 1.0)),
         transforms.RandomHorizontalFlip(),
         transforms.ColorJitter(0.3, 0.3, 0.3),
-        transforms.ToImage(),  # Convert Image to Tensor
+        transforms.RandomRotation(15),
+        v2.ToImage(),  # Convert Image to Tensor
         v2.ToDtype(torch.float32, scale=True),
         v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ]
@@ -91,21 +94,50 @@ train_transform = transforms.Compose(
 
 val_test_transform = transforms.Compose(
     [
-        transforms.Resize(224, 224),
-        transforms.ToImage(),  # Convert Image to Tensor
+        transforms.Resize((224, 224)),
+        v2.ToImage(),  # Convert Image to Tensor
         v2.ToDtype(torch.float32, scale=True),
         v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ]
 )
 
-# TODO: RiceNet Class
 
-# TODO: RiceNet Loader
+# RICENET CLASS
+class RiceDataset(Dataset):
+    def __init__(self, subset, tf=None):
+        self.subset = subset
+        self.tf = tf
+        self.classes = subset.dataset.classes
 
-# TODO: RiceNet freeze
+    def __len__(self):
+        return len(self.subset)
 
-# TODO: RiceNet finetune
+    def __getitem__(self, i):
+        img, label = self.subset[i]
+        img = img.convert("RGB")
+        if self.tf is not None:
+            img = self.tf(img)
+        return img, label
 
-# TODO: Ricenet small cnn
 
-# NOTE: Separate into modules when done and rerun experiments
+# RICENET LOADER
+def make_loader(subset, tf, shuffle=False):
+    return DataLoader(
+        RiceDataset(subset, tf),
+        batch_size=BATCH_SIZE,
+        shuffle=shuffle,
+        num_workers=2,
+        pin_memory=(DEVICE == "cuda"),
+        generator=torch.Generator().manual_seed(SEED) if shuffle else None,
+    )
+
+
+train_dl = make_loader(train_dataset, train_transform, shuffle=True)
+val_dl = make_loader(val_dataset, val_test_transform)
+test_dl = make_loader(test_dataset, val_test_transform)
+
+"""
+# CHECK
+x, y = next(iter(train_dl))
+print(x.shape, y.shape, len(train_dl))
+"""
