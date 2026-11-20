@@ -1,17 +1,25 @@
 from collections import Counter
 from pathlib import Path
 
+import numpy as np
 import torch
-import torch.nn
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
+from sklearn.utils.class_weight import compute_class_weight
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision.datasets import ImageFolder
+from torchvision.models import ResNet18_Weights, resnet18
 from torchvision.transforms import transforms, v2
 
 # SETUP
 SEED = 42
 IMG_SIZE = 224
 BATCH_SIZE = 32  # Change and test to see which is better, trial and error
+EPOCHS = 15  # Budget matched with baseline
+LR = 1e-4
 
 DEVICE = "cpu"
 if torch.cuda.is_available():
@@ -143,112 +151,90 @@ print(x.shape, y.shape, len(train_dl))
 """
 
 
-# ==========================================
-# RESNET-18 FINE-TUNING, HYPERPARAMETER GRID, CLASS WEIGHTING & CHECKPOINTS
-# ==========================================
-
-import os
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.optim.lr_scheduler import CosineAnnealingLR
-from torchvision.models import resnet18, ResNet18_Weights
-from sklearn.utils.class_weight import compute_class_weight
-from sklearn.metrics import f1_score, accuracy_score
-
-# 1. CLASS WEIGHTING 
-print("\nCalculating class weights...")
-train_targets = [train_dataset.dataset.targets[i] for i in train_dataset.indices]
-classes = np.unique(train_targets)
-class_weights = compute_class_weight(class_weight='balanced', classes=classes, y=train_targets)
+# CLASS WEIGHTING
+train_targets = [targets[i] for i in train_idx]
+class_weights = compute_class_weight(
+    class_weight="balanced", classes=np.arange(len(ds.classes)), y=train_targets
+)
 weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(DEVICE)
 criterion = nn.CrossEntropyLoss(weight=weights_tensor)
 
-# 2. RESNET-18 SETUP
-def build_resnet18(num_classes=14):
+
+# RESNET-18 SETUP
+def build_resnet18(num_classes):
     model = resnet18(weights=ResNet18_Weights.DEFAULT)
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, num_classes)
+    model.fc = nn.Linear(model.fc.in_features, num_classes)  # Replace ImageNet head
     return model.to(DEVICE)
 
-# 3. TRAINING & VALIDATION LOOP
-def train_model(model, optimizer, scheduler, criterion, train_loader, val_loader, epochs=15):
+
+# PREDICT ON A LOADER
+def predict(model, loader):
+    model.eval()
+    all_preds, all_labels = [], []
+
+    with torch.no_grad():
+        for images, labels in loader:
+            outputs = model(images.to(DEVICE))
+            all_preds.extend(outputs.argmax(1).cpu().numpy())
+            all_labels.extend(labels.numpy())
+
+    return all_labels, all_preds
+
+
+# TRAINING LOOP
+def train_model(model, optimizer, scheduler, criterion, train_loader, val_loader):
     best_macro_f1 = 0.0
-    checkpoint_dir = "checkpoints"
-    os.makedirs(checkpoint_dir, exist_ok=True)
-    best_model_path = os.path.join(checkpoint_dir, "best_resnet18.pth")
-    
-    for epoch in range(epochs):
+    checkpoint_dir = Path("checkpoints")
+    checkpoint_dir.mkdir(exist_ok=True)
+    best_model_path = checkpoint_dir / "best_resnet18.pth"
+
+    for epoch in range(EPOCHS):
         model.train()
         train_loss = 0.0
-        
+
         for images, labels in train_loader:
             images, labels = images.to(DEVICE), labels.to(DEVICE)
-            
+
             optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
+            loss = criterion(model(images), labels)
             loss.backward()
             optimizer.step()
             train_loss += loss.item() * images.size(0)
-            
+
         scheduler.step()
         train_loss /= len(train_loader.dataset)
-        
-        # Validation
-        model.eval()
-        all_preds, all_labels = [], []
-        
-        with torch.no_grad():
-            for images, labels in val_loader:
-                images, labels = images.to(DEVICE), labels.to(DEVICE)
-                outputs = model(images)
-                _, preds = torch.max(outputs, 1)
-                all_preds.extend(preds.cpu().numpy())
-                all_labels.extend(labels.cpu().numpy())
-                
-        val_macro_f1 = f1_score(all_labels, all_preds, average='macro')
-        print(f"Epoch {epoch+1:02d}/{epochs} | LR: {scheduler.get_last_lr()[0]:.2e} | Train Loss: {train_loss:.4f} | Val Macro-F1: {val_macro_f1:.4f}")
-        
+
+        val_labels, val_preds = predict(model, val_loader)
+        val_macro_f1 = f1_score(val_labels, val_preds, average="macro")
+        print(
+            f"Epoch {epoch + 1:02d}/{EPOCHS} | LR: {scheduler.get_last_lr()[0]:.2e} | "
+            f"Train Loss: {train_loss:.4f} | Val Macro-F1: {val_macro_f1:.4f}"
+        )
+
+        # Keep only the best epoch by validation macro-F1
         if val_macro_f1 > best_macro_f1:
             best_macro_f1 = val_macro_f1
             torch.save(model.state_dict(), best_model_path)
             print(" -> Saved new best checkpoint!")
-            
+
     return best_model_path, best_macro_f1
 
-# 4. EXECUTION 
-print("\n--- Starting ResNet18 Fine-tuning ---")
-EPOCHS = 15 # Budget matched with baseline
-LR = 1e-4
 
-resnet = build_resnet18(num_classes=len(ds.classes))
-optimizer = optim.AdamW(resnet.parameters(), lr=LR, weight_decay=1e-4)
-scheduler = CosineAnnealingLR(optimizer, T_max=EPOCHS)
+# Guard needed on Windows: DataLoader workers re-import this file
+if __name__ == "__main__":
+    # FINE-TUNE RESNET-18
+    resnet = build_resnet18(num_classes=len(ds.classes))
+    optimizer = optim.AdamW(resnet.parameters(), lr=LR, weight_decay=1e-4)
+    scheduler = CosineAnnealingLR(optimizer, T_max=EPOCHS)
 
-best_weights_path, best_val_f1 = train_model(
-    resnet, optimizer, scheduler, criterion, train_dl, val_dl, epochs=EPOCHS
-)
+    best_weights_path, best_val_f1 = train_model(
+        resnet, optimizer, scheduler, criterion, train_dl, val_dl
+    )
 
-# 5. TEST SET EVALUATION
-print("\n--- Running Strict Final Test Set Evaluation ---")
-resnet.load_state_dict(torch.load(best_weights_path, weights_only=True))
-resnet.eval()
+    # TEST SET EVALUATION
+    resnet.load_state_dict(torch.load(best_weights_path, weights_only=True))
+    test_labels, test_preds = predict(resnet, test_dl)
 
-test_preds, test_labels = [], []
-
-with torch.no_grad():
-    for images, labels in test_dl:
-        images, labels = images.to(DEVICE), labels.to(DEVICE)
-        outputs = resnet(images)
-        _, preds = torch.max(outputs, 1)
-        test_preds.extend(preds.cpu().numpy())
-        test_labels.extend(labels.cpu().numpy())
-
-final_acc = accuracy_score(test_labels, test_preds)
-final_macro_f1 = f1_score(test_labels, test_preds, average='macro')
-
-print(f"FINAL TEST ACCURACY: {final_acc * 100:.2f}%")
-print(f"FINAL TEST MACRO-F1: {final_macro_f1:.4f}")
-print("Done! Hand 'checkpoints/best_resnet18.pth' to Faisal for ONNX export.")
+    print(f"FINAL TEST ACCURACY: {accuracy_score(test_labels, test_preds) * 100:.2f}%")
+    print(f"FINAL TEST MACRO-F1: {f1_score(test_labels, test_preds, average='macro'):.4f}")
+    print("Done! Hand 'checkpoints/best_resnet18.pth' to Faisal for ONNX export.")
