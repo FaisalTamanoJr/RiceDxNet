@@ -1,0 +1,15 @@
+# Windows (Python 3.12). Install: pip install -r requirements-windows.txt
+#
+# The plain PyPI torch for Windows is CPU-only, so torch/torchvision come from
+# PyTorch's CUDA 13.2 index (same CUDA build as the Linux setup). They still
+# run on CPU if the machine has no NVIDIA GPU.
+#
+# fastdup is NOT included: it has no Windows wheels, so 01_deduplicate.py
+# can't run on Windows. Run that step on Linux/WSL and share the data/ output.
+--extra-index-url https://download.pytorch.org/whl/cu132
+
+torch==2.15.0
+torchvision==0.29.2
+numpy==1.26.4
+scikit-learn==1.5.0
+kagglehub==1.0.3

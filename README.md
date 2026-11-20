@@ -5,20 +5,23 @@ Fine-tuning an ImageNet-pretrained **ResNet18** to classify 14 rice classes
 compared against a **small CNN trained from scratch** as the baseline.
 
 ## Setup
-Windows
-```bash
+Windows (PowerShell)
+```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 py -3.12 -m venv .venv
-.venv\Scripts\activate.bat
-pip install -r requirements.txt
+.venv\Scripts\Activate.ps1
+pip install -r requirements-windows.txt
 ```
+
+> `fastdup` has no Windows build, so `01_deduplicate.py` only runs on Linux/WSL.
+> Get the deduplicated `data/` folder from a Linux teammate.
 
 Linux
 
 ```bash
 uv venv --python 3.12 .venv
 source .venv/bin/activate        # fish: source .venv/bin/activate.fish
-uv pip install -r requirements.txt
+uv pip install -r requirements-linux.txt
 ```
 
 ## Running the program
