@@ -11,3 +11,17 @@ uv venv --python 3.12 .venv
 source .venv/bin/activate        # fish: source .venv/bin/activate.fish
 uv pip install -r requirements.txt
 ```
+
+## Running the program
+
+Load the dataset
+
+```bash
+python 01_deduplicate.py
+```
+
+Create the RiceDx class and perform dataset splits
+
+```bash
+python 02_ricedx.py
+```
