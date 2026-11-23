@@ -30,7 +30,7 @@ from torchvision.transforms import v2
 SEED = 42
 IMG_SIZE = 224
 BATCH_SIZE = 32
-EPOCHS = 10  # keep equal to the ResNet18 runs
+EPOCHS = 15  # keep equal to the ResNet18 runs
 LRS = [1e-3, 3e-4, 1e-4]  # small sweep so the baseline cannot be called under-tuned
 WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 2
